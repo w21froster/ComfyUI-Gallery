@@ -266,7 +266,6 @@ const GalleryImageGrid = () => {
 
     // Memoized onChange for InfoView
     const infoOnChange = useCallback((current: number) => {
-        setPreviewIndex(current);
         setImageInfoName(previewableImages[current]?.name);
     }, [previewableImages, setImageInfoName]);
 
@@ -324,8 +323,6 @@ const GalleryImageGrid = () => {
 
     // Memoized onChange for video preview
     const videoOnChange = useCallback((current: number) => {
-        setPreviewIndex(current);
-
         const t = previewableImages[current]?.type;
         if (t === "media" || t === "audio") {
             setPreviewingVideo(previewableImages[current]?.name);
@@ -334,33 +331,37 @@ const GalleryImageGrid = () => {
         }
     }, [previewableImages, setPreviewingVideo]);
 
+    // derive index for preview group based on current preview target (info or video) and available previewable images
+    const previewIndex = useMemo(() => {
+        const targetName = imageInfoName ?? previewingVideo;
+        if (!targetName) return 0;
+
+        const index = previewableImages.findIndex(img => img.name === targetName);
+        return index >= 0 ? index : 0;
+    }, [imageInfoName, previewingVideo, previewableImages]);
+
     // common deletion helper used by toolbar
-    const [previewIndex, setPreviewIndex] = React.useState<number | undefined>(undefined);
     const handleDeleteCurrent = useCallback(() => {
-        if (previewIndex === undefined) {
-            console.log("previewIndex is undefined");
-            return;
-        }
+        if (previewIndex === undefined) return;
 
-        try {
-            const file = previewableImages[previewIndex]
-            console.log("Deleting:", file.url);
+        const file = previewableImages[previewIndex];
+        ComfyAppApi.deleteImage(file.url);
 
-            ComfyAppApi.deleteImage(file.url);
+        const nextIndex =
+            previewIndex < previewableImages.length - 1
+                ? previewIndex
+                : previewIndex - 1;
 
+        const nextImage = previewableImages[nextIndex];
+
+        if (nextImage) {
+            setImageInfoName(nextImage.name);
+        } else {
             setImageInfoName(undefined);
             setPreviewingVideo(undefined);
-            setPreviewIndex(undefined);
-
-        } catch (error) {
-            console.error("Error deleting image:", error);
         }
-    }, [
-        previewIndex,
-        imagesUrlsLists,
-        setImageInfoName,
-        setPreviewingVideo
-    ]);
+
+    }, [previewIndex, previewableImages]);
 
     // memoized toolbar renderer for image preview
     const toolbarRenderer = useCallback(
