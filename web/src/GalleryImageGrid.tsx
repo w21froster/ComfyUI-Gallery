@@ -342,10 +342,8 @@ const GalleryImageGrid = () => {
 
     // common deletion helper used by toolbar
     const handleDeleteCurrent = useCallback(() => {
-        if (previewIndex === undefined) return;
-
         const file = previewableImages[previewIndex];
-        ComfyAppApi.deleteImage(file.url);
+        if (!file) return;
 
         const nextIndex =
             previewIndex < previewableImages.length - 1
@@ -353,15 +351,38 @@ const GalleryImageGrid = () => {
                 : previewIndex - 1;
 
         const nextImage = previewableImages[nextIndex];
-
         if (nextImage) {
-            setImageInfoName(nextImage.name);
+            if (nextImage.type === "media" || nextImage.type === "audio") {
+                setPreviewingVideo(nextImage.name);
+                setImageInfoName(undefined);
+            } else {
+                setImageInfoName(nextImage.name);
+                setPreviewingVideo(undefined);
+            }
         } else {
             setImageInfoName(undefined);
             setPreviewingVideo(undefined);
         }
+        ComfyAppApi.deleteImage(file.url);
 
     }, [previewIndex, previewableImages]);
+
+    const handleNavigate = useCallback((direction: -1 | 1) => {
+        const targetIndex = previewIndex + direction;
+
+        if (targetIndex < 0 || targetIndex >= previewableImages.length) return;
+
+        const target = previewableImages[targetIndex];
+        if (!target) return;
+
+        if (target.type === "media" || target.type === "audio") {
+            setPreviewingVideo(target.name);
+            setImageInfoName(undefined);
+        } else {
+            setImageInfoName(target.name);
+            setPreviewingVideo(undefined);
+        }
+    }, [previewIndex, previewableImages, setImageInfoName, setPreviewingVideo]);
 
     // memoized toolbar renderer for image preview
     const toolbarRenderer = useCallback(
@@ -381,11 +402,11 @@ const GalleryImageGrid = () => {
             <Space size={12} className="toolbar-wrapper">
                 <LeftOutlined
                     disabled={previewIndex === 0}
-                    onClick={() => onActive?.(-1)}
+                    onClick={() => handleNavigate(-1)}
                 />
                 <RightOutlined
                     disabled={previewIndex === previewableImages.length - 1}
-                    onClick={() => onActive?.(1)}
+                    onClick={() => handleNavigate(1)}
                 />
                 <SwapOutlined rotate={90} onClick={onFlipY} />
                 <SwapOutlined onClick={onFlipX} />
@@ -419,7 +440,6 @@ const GalleryImageGrid = () => {
                 </div>
             )}
             <Image.PreviewGroup
-                key={previewingVideo ? "media" : imageInfoName ? "info" : "default"}
                 items={imagesUrlsLists}
                 preview={(imageInfoName != undefined) ? {
                     current: previewIndex,
