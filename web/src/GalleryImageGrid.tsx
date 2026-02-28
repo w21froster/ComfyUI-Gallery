@@ -265,9 +265,10 @@ const GalleryImageGrid = () => {
     }, [data, currentFolder, imageInfoName, setShowRawMetadata, showRawMetadata, resolvePreviewableImage]);
 
     // Memoized onChange for InfoView
-    const infoOnChange = useCallback((current: number, prevCurrent: number) => {
+    const infoOnChange = useCallback((current: number) => {
+        setPreviewIndex(current);
         setImageInfoName(previewableImages[current]?.name);
-    }, [setImageInfoName, previewableImages]);
+    }, [previewableImages, setImageInfoName]);
 
     // Memoized afterOpenChange for InfoView
     const infoAfterOpenChange = useCallback((open: boolean) => {
@@ -322,47 +323,40 @@ const GalleryImageGrid = () => {
     }, [data, currentFolder, previewingVideo, settings.autoPlayVideos, resolvePreviewableImage]);
 
     // Memoized onChange for video preview
-    const videoOnChange = useCallback((current: number, prevCurrent: number) => {
+    const videoOnChange = useCallback((current: number) => {
+        setPreviewIndex(current);
+
         const t = previewableImages[current]?.type;
-        if (t == "media" || t == "audio") {
+        if (t === "media" || t === "audio") {
             setPreviewingVideo(previewableImages[current]?.name);
         } else {
             setPreviewingVideo(undefined);
         }
-    }, [setPreviewingVideo, previewableImages]);
-
-    // Memoized current index for InfoView
-    const previewableCurrentIndex: number | undefined = useMemo(() => {
-        let index = previewableImages.findIndex(img => img.name === imageInfoName);
-        if (index < 0) {
-            return undefined;
-        } else {
-            return index;
-        }
-    },
-        [previewableImages, imageInfoName]
-    );
+    }, [previewableImages, setPreviewingVideo]);
 
     // common deletion helper used by toolbar
+    const [previewIndex, setPreviewIndex] = React.useState<number | undefined>(undefined);
     const handleDeleteCurrent = useCallback(() => {
-        if (previewableCurrentIndex === undefined) {
-            console.log("previewableCurrentIndex is undefined");
+        if (previewIndex === undefined) {
+            console.log("previewIndex is undefined");
             return;
         }
 
         try {
-            console.log("Attempting to delete image:", imagesUrlsLists[previewableCurrentIndex]);
-            ComfyAppApi.deleteImage(
-                imagesUrlsLists[previewableCurrentIndex]
-            );
+            const url = imagesUrlsLists[previewIndex];
+            console.log("Deleting:", url);
+
+            ComfyAppApi.deleteImage(url);
 
             setImageInfoName(undefined);
             setPreviewingVideo(undefined);
+            setPreviewIndex(undefined);
+
         } catch (error) {
             console.error("Error deleting image:", error);
         }
     }, [
-        previewableCurrentIndex,
+        previewIndex,
         imagesUrlsLists,
         setImageInfoName,
         setPreviewingVideo
@@ -385,11 +379,11 @@ const GalleryImageGrid = () => {
         }: any) => (
             <Space size={12} className="toolbar-wrapper">
                 <LeftOutlined
-                    disabled={previewableCurrentIndex === 0}
+                    disabled={previewIndex === 0}
                     onClick={() => onActive?.(-1)}
                 />
                 <RightOutlined
-                    disabled={previewableCurrentIndex === previewableImages.length - 1}
+                    disabled={previewIndex === previewableImages.length - 1}
                     onClick={() => onActive?.(1)}
                 />
                 <SwapOutlined rotate={90} onClick={onFlipY} />
@@ -402,7 +396,7 @@ const GalleryImageGrid = () => {
                 <DeleteOutlined onClick={handleDeleteCurrent} />
             </Space>
         ),
-        [previewableCurrentIndex, previewableImages.length, handleDeleteCurrent]
+        [previewIndex, previewableImages.length, handleDeleteCurrent]
     );
 
     return (
@@ -427,14 +421,14 @@ const GalleryImageGrid = () => {
                 key={previewingVideo ? "media" : imageInfoName ? "info" : "default"}
                 items={imagesUrlsLists}
                 preview={(imageInfoName != undefined) ? {
-                    current: previewableCurrentIndex,
+                    current: previewIndex,
                     imageRender: infoImageRender,
                     toolbarRender: toolbarRenderer,
                     onChange: infoOnChange,
                     afterOpenChange: infoAfterOpenChange,
                     destroyOnClose: true
                 } : {
-                    current: previewableCurrentIndex,
+                    current: previewIndex,
                     toolbarRender: toolbarRenderer,
                     onChange: videoOnChange,
                     imageRender: previewingVideo != undefined ? videoImageRender : undefined,
