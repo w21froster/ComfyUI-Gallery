@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { Empty, Image, Spin } from 'antd';
 import { AutoSizer } from 'react-virtualized';
 import { FixedSizeGrid } from 'react-window';
@@ -6,7 +6,7 @@ import ImageCard, { ImageCardHeight, ImageCardWidth } from './ImageCard';
 import { useGalleryContext } from './GalleryContext';
 import { MetadataView } from './MetadataView';
 import type { FileDetails } from './types';
-import { BASE_PATH } from "./ComfyAppApi";
+import { BASE_PATH, ComfyAppApi } from "./ComfyAppApi";
 
 const GalleryImageGrid = () => {
     const {
@@ -27,6 +27,7 @@ const GalleryImageGrid = () => {
         settings,
         loading 
     } = useGalleryContext();
+    const [activeImageName, setActiveImageName] = useState<string | undefined>(undefined);
     const containerRef = useRef<HTMLDivElement>(null);
     const imagesDetailsList = useMemo(() => {
         let list: FileDetails[] = Object.values(data?.folders?.[currentFolder] ?? []);
@@ -255,12 +256,17 @@ const GalleryImageGrid = () => {
 
     // Memoized onChange for InfoView
     const infoOnChange = useCallback((current: number, prevCurrent: number) => {
-        setImageInfoName(previewableImages[current]?.name);
+        const name = previewableImages[current]?.name;
+        setImageInfoName(name);
+        setActiveImageName(name);
     }, [setImageInfoName, previewableImages]);
 
     // Memoized afterOpenChange for InfoView
     const infoAfterOpenChange = useCallback((open: boolean) => {
-        if (!open) setImageInfoName(undefined);
+        if (!open) {
+            setImageInfoName(undefined);
+            setActiveImageName(undefined);
+        }
     }, [setImageInfoName]);
 
     // Memoized media (video/audio) imageRender
@@ -318,7 +324,72 @@ const GalleryImageGrid = () => {
         } else {
             setPreviewingVideo(undefined);
         }
+        setActiveImageName(previewableImages[current]?.name);
     }, [setPreviewingVideo, previewableImages]);
+
+    // Sync active image when preview target changes
+    useEffect(() => {
+        if (imageInfoName) setActiveImageName(imageInfoName);
+        else if (previewingVideo) setActiveImageName(previewingVideo);
+        else setActiveImageName(undefined);
+    }, [imageInfoName, previewingVideo]);
+
+    const handleDeletePrompt = useCallback(async () => {
+        const name = activeImageName;
+        if (!name) return;
+        const confirmed = window.confirm(`Delete "${name}"? This action cannot be undone.`);
+        if (!confirmed) return;
+
+        const item = data?.folders?.[currentFolder]?.[name];
+        const imagePath = item?.path ?? item?.url ?? name;
+        try {
+            const ok = await ComfyAppApi.deleteImage(imagePath);
+            if (ok) {
+                // Advance to the next previewable image if available
+                const idx = previewableImages.findIndex(img => img.name === name);
+                let nextImg = undefined as FileDetails | undefined;
+                if (idx >= 0) {
+                    nextImg = previewableImages[idx + 1] ?? previewableImages[idx - 1];
+                }
+
+                if (nextImg) {
+                    if (nextImg.type === 'media' || nextImg.type === 'audio') {
+                        setPreviewingVideo(nextImg.name);
+                        setImageInfoName(undefined);
+                        setActiveImageName(nextImg.name);
+                    } else {
+                        setImageInfoName(nextImg.name);
+                        setPreviewingVideo(undefined);
+                        setActiveImageName(nextImg.name);
+                    }
+                } else {
+                    // No more images; close preview
+                    setImageInfoName(undefined);
+                    setPreviewingVideo(undefined);
+                    setActiveImageName(undefined);
+                }
+            } else {
+                window.alert('Failed to delete image.');
+            }
+        } catch (e) {
+            console.error('Error deleting image:', e);
+            window.alert('Error deleting image.');
+        }
+    }, [activeImageName, setImageInfoName, setPreviewingVideo, data, currentFolder, previewableImages]);
+
+    // Backspace key opens delete prompt while preview is open
+    useEffect(() => {
+        const isPreviewOpen = imageInfoName != undefined || previewingVideo != undefined;
+        if (!isPreviewOpen) return;
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Backspace' || e.keyCode === 8) {
+                e.preventDefault();
+                handleDeletePrompt();
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [imageInfoName, previewingVideo, handleDeletePrompt]);
 
     // Memoized current index for InfoView
     const previewableCurrentIndex = useMemo(() => {
