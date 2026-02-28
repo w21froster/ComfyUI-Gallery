@@ -343,6 +343,54 @@ const GalleryImageGrid = () => {
         [previewableImages, imageInfoName]
     );
 
+    // common deletion helper used by toolbar
+    const handleDeleteCurrent = useCallback(() => {
+        if (previewableCurrentIndex !== undefined) {
+            try {
+                ComfyAppApi.deleteImage(imagesUrlsLists[previewableCurrentIndex]);
+            } catch (error) {
+                console.error("Error deleting image:", error);
+            }
+        }
+    }, [previewableCurrentIndex, imagesUrlsLists]);
+
+    // memoized toolbar renderer for image preview
+    const toolbarRenderer = useCallback(
+        (_: any, {
+            transform: { scale },
+            actions: {
+                onActive,
+                onFlipY,
+                onFlipX,
+                onRotateLeft,
+                onRotateRight,
+                onZoomOut,
+                onZoomIn,
+                onReset,
+            },
+        }: any) => (
+            <Space size={12} className="toolbar-wrapper">
+                <LeftOutlined
+                    disabled={previewableCurrentIndex === 0}
+                    onClick={() => onActive?.(-1)}
+                />
+                <RightOutlined
+                    disabled={previewableCurrentIndex === previewableImages.length - 1}
+                    onClick={() => onActive?.(1)}
+                />
+                <SwapOutlined rotate={90} onClick={onFlipY} />
+                <SwapOutlined onClick={onFlipX} />
+                <RotateLeftOutlined onClick={onRotateLeft} />
+                <RotateRightOutlined onClick={onRotateRight} />
+                <ZoomOutOutlined disabled={scale === 1} onClick={onZoomOut} />
+                <ZoomInOutlined disabled={scale === 50} onClick={onZoomIn} />
+                <UndoOutlined onClick={onReset} />
+                <DeleteOutlined onClick={handleDeleteCurrent} />
+            </Space>
+        ),
+        [previewableCurrentIndex, previewableImages.length, handleDeleteCurrent]
+    );
+
     return (
         <div id="imagesBox" style={{ width: '100%', height: '100%', position: 'relative' }} ref={containerRef}>
             {loading && (
@@ -362,54 +410,18 @@ const GalleryImageGrid = () => {
                 </div>
             )}
             <Image.PreviewGroup
-                // key={imagesUrlsLists.length}
+                key={previewingVideo ? "media" : imageInfoName ? "info" : "default"}
                 items={imagesUrlsLists}
                 preview={(imageInfoName != undefined) ? {
                     current: previewableCurrentIndex,
                     imageRender: infoImageRender,
-                    toolbarRender: (
-                        _,
-                        {
-                            transform: { scale },
-                            actions: {
-                            onActive,
-                            onFlipY,
-                            onFlipX,
-                            onRotateLeft,
-                            onRotateRight,
-                            onZoomOut,
-                            onZoomIn,
-                            onReset,
-                            },
-                        },
-                        ) => (
-                        <Space size={12} className="toolbar-wrapper">
-                            <LeftOutlined disabled={previewableCurrentIndex === 0} onClick={() => onActive?.(-1)} />
-                            <RightOutlined
-                            disabled={previewableCurrentIndex === previewableImages.length - 1}
-                            onClick={() => onActive?.(1)}
-                            />
-                            <SwapOutlined rotate={90} onClick={onFlipY} />
-                            <SwapOutlined onClick={onFlipX} />
-                            <RotateLeftOutlined onClick={onRotateLeft} />
-                            <RotateRightOutlined onClick={onRotateRight} />
-                            <ZoomOutOutlined disabled={scale === 1} onClick={onZoomOut} />
-                            <ZoomInOutlined disabled={scale === 50} onClick={onZoomIn} />
-                            <UndoOutlined onClick={onReset} />
-                            <DeleteOutlined onClick={() => {
-                                try {
-                                previewableCurrentIndex !== undefined && ComfyAppApi.deleteImage(imagesUrlsLists[previewableCurrentIndex])
-                                } catch (error) {
-                                    console.error("Error deleting image:", error);
-                                }
-                            }}/>
-                        </Space>
-                        ),
+                    toolbarRender: toolbarRenderer,
                     onChange: infoOnChange,
                     afterOpenChange: infoAfterOpenChange,
                     destroyOnClose: true
                 } : {
                     current: previewableCurrentIndex,
+                    toolbarRender: toolbarRenderer,
                     onChange: videoOnChange,
                     imageRender: previewingVideo != undefined ? videoImageRender : undefined,
                     destroyOnClose: true,
