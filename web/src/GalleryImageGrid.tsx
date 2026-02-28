@@ -345,9 +345,13 @@ const GalleryImageGrid = () => {
 
     // common deletion helper used by toolbar
     const handleDeleteCurrent = useCallback(() => {
-        if (previewableCurrentIndex === undefined) return;
+        if (previewableCurrentIndex === undefined) {
+            console.log("previewableCurrentIndex is undefined");
+            return;
+        }
 
         try {
+            console.log("Attempting to delete image:", imagesUrlsLists[previewableCurrentIndex]);
             ComfyAppApi.deleteImage(
                 imagesUrlsLists[previewableCurrentIndex]
             );
