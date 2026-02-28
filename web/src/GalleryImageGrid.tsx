@@ -343,10 +343,10 @@ const GalleryImageGrid = () => {
         }
 
         try {
-            const url = imagesUrlsLists[previewIndex];
-            console.log("Deleting:", url);
+            const file = previewableImages[previewIndex]
+            console.log("Deleting:", file.url);
 
-            ComfyAppApi.deleteImage(url);
+            ComfyAppApi.deleteImage(file.url);
 
             setImageInfoName(undefined);
             setPreviewingVideo(undefined);
