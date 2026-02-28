@@ -1,12 +1,23 @@
 import React, { useMemo, useCallback, useEffect, useRef } from 'react';
-import { Empty, Image, Spin } from 'antd';
+import {
+  DeleteOutlined,
+  LeftOutlined,
+  RightOutlined,
+  RotateLeftOutlined,
+  RotateRightOutlined,
+  SwapOutlined,
+  UndoOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+} from '@ant-design/icons';
+import { Empty, Image, Space, Spin } from 'antd';
 import { AutoSizer } from 'react-virtualized';
 import { FixedSizeGrid } from 'react-window';
 import ImageCard, { ImageCardHeight, ImageCardWidth } from './ImageCard';
 import { useGalleryContext } from './GalleryContext';
 import { MetadataView } from './MetadataView';
 import type { FileDetails } from './types';
-import { BASE_PATH } from "./ComfyAppApi";
+import { ComfyAppApi, BASE_PATH } from "./ComfyAppApi";
 
 const GalleryImageGrid = () => {
     const {
@@ -321,7 +332,7 @@ const GalleryImageGrid = () => {
     }, [setPreviewingVideo, previewableImages]);
 
     // Memoized current index for InfoView
-    const previewableCurrentIndex = useMemo(() => {
+    const previewableCurrentIndex: number | undefined = useMemo(() => {
         let index = previewableImages.findIndex(img => img.name === imageInfoName);
         if (index < 0) {
             return undefined;
@@ -356,7 +367,44 @@ const GalleryImageGrid = () => {
                 preview={(imageInfoName != undefined) ? {
                     current: previewableCurrentIndex,
                     imageRender: infoImageRender,
-                    toolbarRender: () => null,
+                    toolbarRender: (
+                        _,
+                        {
+                            transform: { scale },
+                            actions: {
+                            onActive,
+                            onFlipY,
+                            onFlipX,
+                            onRotateLeft,
+                            onRotateRight,
+                            onZoomOut,
+                            onZoomIn,
+                            onReset,
+                            },
+                        },
+                        ) => (
+                        <Space size={12} className="toolbar-wrapper">
+                            <LeftOutlined disabled={previewableCurrentIndex === 0} onClick={() => onActive?.(-1)} />
+                            <RightOutlined
+                            disabled={previewableCurrentIndex === previewableImages.length - 1}
+                            onClick={() => onActive?.(1)}
+                            />
+                            <SwapOutlined rotate={90} onClick={onFlipY} />
+                            <SwapOutlined onClick={onFlipX} />
+                            <RotateLeftOutlined onClick={onRotateLeft} />
+                            <RotateRightOutlined onClick={onRotateRight} />
+                            <ZoomOutOutlined disabled={scale === 1} onClick={onZoomOut} />
+                            <ZoomInOutlined disabled={scale === 50} onClick={onZoomIn} />
+                            <UndoOutlined onClick={onReset} />
+                            <DeleteOutlined onClick={() => {
+                                try {
+                                previewableCurrentIndex !== undefined && ComfyAppApi.deleteImage(imagesUrlsLists[previewableCurrentIndex])
+                                } catch (error) {
+                                    console.error("Error deleting image:", error);
+                                }
+                            }}/>
+                        </Space>
+                        ),
                     onChange: infoOnChange,
                     afterOpenChange: infoAfterOpenChange,
                     destroyOnClose: true
@@ -364,7 +412,6 @@ const GalleryImageGrid = () => {
                     current: previewableCurrentIndex,
                     onChange: videoOnChange,
                     imageRender: previewingVideo != undefined ? videoImageRender : undefined,
-                    toolbarRender: previewingVideo != undefined ? () => null : undefined,
                     destroyOnClose: true,
                     afterOpenChange(open) {
                         if (!open) setPreviewingVideo(undefined);
