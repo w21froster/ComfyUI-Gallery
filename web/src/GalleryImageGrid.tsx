@@ -85,17 +85,29 @@ const GalleryImageGrid = () => {
         [imagesDetailsList]
     );
 
-    const [activePreview, setActivePreview] = React.useState<{
-        name: string;
-        mode: "info" | "media";
+    const [previewState, setPreviewState] = React.useState<{
+        index: number;
+        mode: "image" | "info" | "media";
     } | null>(null);
 
+    // Memoized previewable images for InfoView navigation and rendering
+    const previewableImages = useMemo(() =>
+        imagesDetailsList.filter(img => img.type === "image" || img.type === "media" || img.type === "audio"),
+        [imagesDetailsList]
+    );
+
     const handleInfoClick = useCallback((imageName: string) => {
-        setActivePreview({
-            name: imageName,
-            mode: "info"
-        });
-    }, []);
+    const index = previewableImages.findIndex(
+        img => img.name === imageName
+    );
+
+    if (index === -1) return;
+
+    setPreviewState({
+        index,
+        mode: "info"
+    });
+    }, [previewableImages]);
 
     const Cell = useCallback(({ columnIndex, rowIndex, style }: { columnIndex: number; rowIndex: number; style: React.CSSProperties }) => {
         const index = rowIndex * gridSize.columnCount + columnIndex;
@@ -193,11 +205,18 @@ const GalleryImageGrid = () => {
                     }} 
                     key={image.name} 
                     index={index} 
-                    onInfoClick={() => handleInfoClick(image.name)}
-                    onVideoClick={() => setActivePreview({
-                        name: image.name,
+                    onInfoClick={() =>
+                        setPreviewState({
+                            index: previewableImages.findIndex(i => i.name === image.name),
+                            mode: "info"
+                        })
+                    }
+                    onVideoClick={() =>
+                    setPreviewState({
+                        index: previewableImages.findIndex(i => i.name === image.name),
                         mode: "media"
-                    })} 
+                    })
+                    }
                 />
             </div>
         );
@@ -208,7 +227,7 @@ const GalleryImageGrid = () => {
         const columnCount = Math.max(1, Math.floor(width / (ImageCardWidth + 16)));
         const rowCount = Math.ceil(imagesDetailsList.length / columnCount);
         setGridSize({ width, height, columnCount, rowCount });
-    }, [autoSizer.width, autoSizer.height, imagesDetailsList.length]);
+    }, [autoSizer.width, autoSizer.height, imagesDetailsList.length, setGridSize]);
 
     useEffect(() => {
         const grid = document.querySelector(".grid-element");
@@ -219,54 +238,50 @@ const GalleryImageGrid = () => {
         }
     }, [gridSize, imageInfoName, currentFolder, data]);
 
-    // Memoized previewable images for InfoView navigation and rendering
-    const previewableImages = useMemo(() =>
-        imagesDetailsList.filter(img => img.type === "image" || img.type === "media" || img.type === "audio"),
-        [imagesDetailsList]
-    );
+    const renderPreviewContent = useCallback(
+    (originNode: React.ReactNode) => {
+        if (!previewState) return originNode;
 
-    // Helper to resolve image for Info/Image render
-    const resolvePreviewableImage = useCallback((image: FileDetails | undefined, info: { current: number }) => {
-        if (image) return image;
-        let resolved: FileDetails | undefined;
-        // Try forward
-        for (let index = info.current; index < previewableImages.length; index++) {
-            let current = previewableImages[index];
-            resolved = current;
-            break;
-        }
-        // Try backward
-        if (!resolved) {
-            for (let index = info.current; index > 0 && index > previewableImages.length; index--) {
-                let current = previewableImages[index];
-                resolved = current;
-                break;
-            }
-        }
-        // If still not found, return undefined
-        if (!resolved) return undefined;
+        const file = previewableImages[previewState.index];
+        if (!file) return originNode;
 
-        setImageInfoName(resolved!.name);
-
-        return resolved;
-    }, [previewableImages, imagesDetailsList, setImageInfoName]);
-
-    // Memoized imageRender for InfoView
-    const infoImageRender = useCallback(() => {
-        if (!activePreview || activePreview.mode !== "info") return null;
-
-        const image = data?.folders?.[currentFolder]?.[activePreview.name];
-        if (!image) return null;
-
+        if (previewState.mode === "info") {
         return (
             <MetadataView
-                image={image}
-                onShowRaw={() => setShowRawMetadata(true)}
-                showRawMetadata={showRawMetadata}
-                setShowRawMetadata={setShowRawMetadata}
+            image={file}
+            onShowRaw={() => setShowRawMetadata(true)}
+            showRawMetadata={showRawMetadata}
+            setShowRawMetadata={setShowRawMetadata}
             />
         );
-    }, [activePreview, data, currentFolder, showRawMetadata]);
+        }
+
+        if (previewState.mode === "media") {
+        if (file.type === "audio") {
+            return (
+            <audio
+                controls
+                style={{ maxWidth: "100%" }}
+                src={`${BASE_PATH}${file.url}`}
+            />
+            );
+        }
+
+        if (file.type === "media") {
+            return (
+            <video
+                controls
+                style={{ maxWidth: "100%" }}
+                src={`${BASE_PATH}${file.url}`}
+            />
+            );
+        }
+        }
+
+        return originNode;
+    },
+    [previewState, previewableImages, showRawMetadata]
+    );
 
     // Memoized onChange for InfoView
     const infoOnChange = useCallback((current: number) => {
@@ -278,20 +293,6 @@ const GalleryImageGrid = () => {
         if (!open) setImageInfoName(undefined);
     }, [setImageInfoName]);
 
-    // Memoized media (video/audio) imageRender
-    const videoImageRender = useCallback(() => {
-        if (!activePreview || activePreview.mode !== "media") return null;
-
-        const image = data?.folders?.[currentFolder]?.[activePreview.name];
-        if (!image) return null;
-
-        if (image.type === "audio") {
-            return <audio controls src={`${BASE_PATH}${image.url}`} />;
-        }
-
-        return <video controls src={`${BASE_PATH}${image.url}`} />;
-    }, [activePreview, data, currentFolder]);
-
     // Memoized onChange for video preview
     const videoOnChange = useCallback((current: number) => {
         const t = previewableImages[current]?.type;
@@ -302,93 +303,85 @@ const GalleryImageGrid = () => {
         }
     }, [previewableImages, setPreviewingVideo]);
 
-    const previewIndex = useMemo(() => {
-        if (!activePreview) return 0;
-
-        const index = previewableImages.findIndex(
-            img => img.name === activePreview.name
-        );
-
-        return index >= 0 ? index : 0;
-    }, [activePreview, previewableImages]);
-
     // common deletion helper used by toolbar
     const handleDeleteCurrent = useCallback(() => {
-        if (!activePreview) return;
+    if (!previewState) return;
 
-        const file = previewableImages[previewIndex];
-        if (!file) return;
+    const file = previewableImages[previewState.index];
+    if (!file) return;
 
-        const nextIndex =
-            previewIndex < previewableImages.length - 1
-                ? previewIndex
-                : previewIndex - 1;
+    ComfyAppApi.deleteImage(file.url);
 
-        const nextImage = previewableImages[nextIndex];
+    const nextIndex =
+        previewState.index < previewableImages.length - 1
+        ? previewState.index
+        : previewState.index - 1;
 
-        if (nextImage) {
-            setActivePreview(prev => ({
-                name: nextImage.name,
-                mode: prev?.mode ?? "info"
-            }));
-        } else {
-            setActivePreview(null);
-        }
+    if (nextIndex >= 0) {
+        setPreviewState(prev =>
+        prev
+            ? { ...prev, index: nextIndex }
+            : null
+        );
+    } else {
+        setPreviewState(null);
+    }
+    }, [previewState, previewableImages]);
 
-        ComfyAppApi.deleteImage(file.url);
+    const handleNavigate = useCallback(
+    (direction: -1 | 1) => {
+        if (!previewState) return;
 
-    }, [activePreview, previewIndex, previewableImages]);
+        const nextIndex = previewState.index + direction;
+        if (nextIndex < 0 || nextIndex >= previewableImages.length) return;
 
-    const handleNavigate = useCallback((direction: -1 | 1) => {
-        if (!activePreview) return;
-
-        const targetIndex = previewIndex + direction;
-        if (targetIndex < 0 || targetIndex >= previewableImages.length) return;
-
-        const target = previewableImages[targetIndex];
-        if (!target) return;
-
-        setActivePreview(prev => ({
-            name: target.name,
-            mode: prev?.mode ?? "info"
-        }));
-    }, [previewIndex, previewableImages, activePreview]);
+        setPreviewState(prev =>
+        prev
+            ? { ...prev, index: nextIndex }
+            : null
+        );
+    },
+    [previewState, previewableImages.length]
+    );
 
     // memoized toolbar renderer for image preview
     const toolbarRenderer = useCallback(
-        (_: any, {
-            transform: { scale },
-            actions: {
-                onActive,
-                onFlipY,
-                onFlipX,
-                onRotateLeft,
-                onRotateRight,
-                onZoomOut,
-                onZoomIn,
-                onReset,
-            },
-        }: any) => (
-            <Space size={12} className="toolbar-wrapper">
-                <LeftOutlined
-                    disabled={previewIndex === 0}
-                    onClick={() => handleNavigate(-1)}
-                />
-                <RightOutlined
-                    disabled={previewIndex === previewableImages.length - 1}
-                    onClick={() => handleNavigate(1)}
-                />
-                <SwapOutlined rotate={90} onClick={onFlipY} />
-                <SwapOutlined onClick={onFlipX} />
-                <RotateLeftOutlined onClick={onRotateLeft} />
-                <RotateRightOutlined onClick={onRotateRight} />
-                <ZoomOutOutlined disabled={scale === 1} onClick={onZoomOut} />
-                <ZoomInOutlined disabled={scale === 50} onClick={onZoomIn} />
-                <UndoOutlined onClick={onReset} />
-                <DeleteOutlined onClick={handleDeleteCurrent} />
-            </Space>
-        ),
-        [previewIndex, previewableImages.length, handleDeleteCurrent]
+    (_: any, {
+        transform: { scale },
+        actions: {
+        onFlipY,
+        onFlipX,
+        onRotateLeft,
+        onRotateRight,
+        onZoomOut,
+        onZoomIn,
+        onReset,
+        },
+    }: any) => {
+        const index = previewState?.index ?? 0;
+
+        return (
+        <Space size={12} className="toolbar-wrapper">
+            <LeftOutlined
+            disabled={index === 0}
+            onClick={() => handleNavigate(-1)}
+            />
+            <RightOutlined
+            disabled={index === previewableImages.length - 1}
+            onClick={() => handleNavigate(1)}
+            />
+            <SwapOutlined rotate={90} onClick={onFlipY} />
+            <SwapOutlined onClick={onFlipX} />
+            <RotateLeftOutlined onClick={onRotateLeft} />
+            <RotateRightOutlined onClick={onRotateRight} />
+            <ZoomOutOutlined disabled={scale === 1} onClick={onZoomOut} />
+            <ZoomInOutlined disabled={scale === 50} onClick={onZoomIn} />
+            <UndoOutlined onClick={onReset} />
+            <DeleteOutlined onClick={handleDeleteCurrent} />
+        </Space>
+        );
+    },
+    [previewState, previewableImages.length, handleNavigate, handleDeleteCurrent]
     );
 
     return (
@@ -410,27 +403,22 @@ const GalleryImageGrid = () => {
                 </div>
             )}
             <Image.PreviewGroup
-                preview={{
-                    current: previewIndex,
-                    toolbarRender: toolbarRenderer,
-                    imageRender:
-                        activePreview?.mode === "info"
-                            ? infoImageRender
-                            : videoImageRender,
-                    onChange: (current) => {
-                        const target = previewableImages[current];
-                        if (!target) return;
-
-                        setActivePreview(prev => ({
-                            name: target.name,
-                            mode: prev?.mode ?? "info"
-                        }));
-                    },
-                    afterOpenChange: (open) => {
-                        if (!open) setActivePreview(null);
-                    },
-                    destroyOnClose: true
-                }}
+            preview={{
+                current: previewState?.index ?? 0,
+                imageRender: renderPreviewContent,
+                toolbarRender: toolbarRenderer,
+                onChange: (current) => {
+                setPreviewState(prev =>
+                    prev
+                    ? { ...prev, index: current }
+                    : { index: current, mode: "image" }
+                );
+                },
+                afterOpenChange: (open) => {
+                if (!open) setPreviewState(null);
+                },
+                destroyOnClose: true
+            }}
             >
                 {previewableImages.map((img) => (
                 <Image
