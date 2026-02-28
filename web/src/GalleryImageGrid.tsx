@@ -345,14 +345,24 @@ const GalleryImageGrid = () => {
 
     // common deletion helper used by toolbar
     const handleDeleteCurrent = useCallback(() => {
-        if (previewableCurrentIndex !== undefined) {
-            try {
-                ComfyAppApi.deleteImage(imagesUrlsLists[previewableCurrentIndex]);
-            } catch (error) {
-                console.error("Error deleting image:", error);
-            }
+        if (previewableCurrentIndex === undefined) return;
+
+        try {
+            ComfyAppApi.deleteImage(
+                imagesUrlsLists[previewableCurrentIndex]
+            );
+
+            setImageInfoName(undefined);
+            setPreviewingVideo(undefined);
+        } catch (error) {
+            console.error("Error deleting image:", error);
         }
-    }, [previewableCurrentIndex, imagesUrlsLists]);
+    }, [
+        previewableCurrentIndex,
+        imagesUrlsLists,
+        setImageInfoName,
+        setPreviewingVideo
+    ]);
 
     // memoized toolbar renderer for image preview
     const toolbarRenderer = useCallback(
