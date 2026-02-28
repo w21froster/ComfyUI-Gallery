@@ -432,6 +432,13 @@ const GalleryImageGrid = () => {
                     destroyOnClose: true
                 }}
             >
+                {previewableImages.map((img) => (
+                <Image
+                    key={`preview-${img.name}`}
+                    src={`${BASE_PATH}${img.url}`}
+                    style={{ display: "none" }}
+                />
+                ))}
                 {imagesDetailsList.length === 0 ? (
                     <Empty 
                         style={{ 
